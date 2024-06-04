@@ -31,6 +31,7 @@ class Extrapolator:
         self.coefficients = []
         self.overlaps = []
         self.fit = Fitting(regularization=1e-4)
+        self.npoints = 0
 
     def load_(self, descriptor: np.ndarray, coeff: np.ndarray,
             overlap: np.ndarray):
@@ -45,9 +46,14 @@ class Extrapolator:
         self.coefficients.append(coeff)
         self.overlaps.append(overlap)
 
+        self.npoints += 1
 
-    def guess(self, descriptor: np.ndarray, overlap: np.ndarray) -> np.ndarray:
+
+    def guess(self, descriptor: np.ndarray, overlap: np.ndarray):
         """Get a new coefficient matrix to be used as a guess."""
+
+        if not self._ready_to_guess():
+            return None
 
         # get the fitting coefficients that best approximate the new
         # descriptor
@@ -66,6 +72,11 @@ class Extrapolator:
         # remove the normalization by S^1/2
         c_guess = self._grassmann_exp(gamma)
         return self._unnormalize(c_guess, overlap)
+
+    def _ready_to_guess(self):
+        if self.npoints > 1:
+            return True
+        return False
 
     def _crop_coeff(self, coeff):
         """Crop the coefficient matrix to remove the virtual orbitals."""
