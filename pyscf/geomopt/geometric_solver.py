@@ -85,12 +85,10 @@ class PySCFEngine(geometric.engine.Engine):
             coords = symmetrize(mol, coords)
 
         mol.set_geom_(coords, unit='Bohr')
-
         energy, gradients = g_scanner(mol)
         logger.note(g_scanner, 'cycle %d: E = %.12g  dE = %g  norm(grad) = %g',
                     self.cycle, energy, energy - self.e_last, numpy.linalg.norm(gradients))
         self.e_last = energy
-
 
         if callable(self.callback):
             self.callback(locals())
