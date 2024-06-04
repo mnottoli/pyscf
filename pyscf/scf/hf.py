@@ -22,6 +22,7 @@ Hartree-Fock
 
 import sys
 import tempfile
+import warnings
 
 from functools import reduce
 import numpy
@@ -1437,11 +1438,14 @@ class SCF_Scanner(lib.SinglePointScanner):
         return e_tot
 
     def enable_gext(self):
-        #if not isinstance(self.base, (hf.RKS_Scanner, hf.RHF_Scanner)):
-        #    warning.warn("The Grassmann extrapolation is only available" + \
-        #        " with restricted closed shell methods.")
-        #    return
-        self.extrapolator = Extrapolator(int(self.mol.nelectron))
+        """Enable the Grassmann extrapolation for repeated calculations."""
+        nelectron = int(self.mol.nelectron)
+        if (not isinstance(self.undo_scanner(), (type(self.mol.RHF), \
+                type(self.mol.RKS)))) or nelectron % 2 != 0:
+            warnings.warn('The Grassmann extrapolation is only available '
+                          'with restricted closed shell methods.')
+            return
+        self.extrapolator = Extrapolator(nelectron)
         self.gext_enabled = True
 
 class SCF(lib.StreamObject):
