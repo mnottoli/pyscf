@@ -31,6 +31,8 @@ from pyscf.geomopt.addons import (as_pyscf_method, dump_mol_geometry,
 from pyscf import __config__
 from pyscf.grad.rhf import GradientsBase
 
+from pyscf.geomopt.gext import Extrapolator
+
 try:
     from geometric import internal, optimize, nifty, engine, molecule
 except ImportError:
@@ -50,7 +52,7 @@ INCLUDE_GHOST = getattr(__config__, 'geomopt_berny_solver_optimize_include_ghost
 ASSERT_CONV = getattr(__config__, 'geomopt_berny_solver_optimize_assert_convergence', True)
 
 class PySCFEngine(geometric.engine.Engine):
-    def __init__(self, scanner):
+    def __init__(self, scanner, gext=False):
         molecule = geometric.molecule.Molecule()
         self.mol = mol = scanner.mol
         molecule.elem = [mol.atom_symbol(i) for i in range(mol.natm)]
@@ -65,6 +67,10 @@ class PySCFEngine(geometric.engine.Engine):
         self.callback = None
         self.maxsteps = 100
         self.assert_convergence = False
+
+        self.gext = gext
+        if self.gext:
+            self.extrapolator = Extrapolator(int(self.mol.nelectron))
 
     def calc_new(self, coords, dirname):
         if self.cycle >= self.maxsteps:
@@ -85,10 +91,21 @@ class PySCFEngine(geometric.engine.Engine):
             coords = symmetrize(mol, coords)
 
         mol.set_geom_(coords, unit='Bohr')
+
+        if self.gext:
+            overlap = self.scanner.base.get_ovlp(self.mol)
+            hcore = self.scanner.base.get_hcore(self.mol)
+            if self.cycle > 2:
+                mo_guess = self.extrapolator.guess(hcore, overlap)
+                self.scanner.base.mo_coeff[:, :self.mol.nelectron//2] = mo_guess
+
         energy, gradients = g_scanner(mol)
         logger.note(g_scanner, 'cycle %d: E = %.12g  dE = %g  norm(grad) = %g',
                     self.cycle, energy, energy - self.e_last, numpy.linalg.norm(gradients))
         self.e_last = energy
+
+        if self.gext:
+            self.extrapolator.load_(hcore, self.scanner.base.mo_coeff, overlap)
 
         if callable(self.callback):
             self.callback(locals())
@@ -129,7 +146,11 @@ def kernel(method, assert_convergence=ASSERT_CONV,
     if not include_ghost:
         g_scanner.atmlst = numpy.where(method.mol.atom_charges() != 0)[0]
 
-    engine = PySCFEngine(g_scanner)
+    gext = False
+    if "gext" in kwargs:
+        gext = kwargs["gext"]
+
+    engine = PySCFEngine(g_scanner, gext=gext)
     engine.callback = callback
     engine.maxsteps = maxsteps
     # To avoid overwriting method.mol
