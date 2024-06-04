@@ -29,6 +29,7 @@ from pyscf.lib import logger
 from pyscf.scf import hf, _vhf
 from pyscf.gto.mole import is_au
 
+from pyscf.lib.gext import Extrapolator
 
 def grad_elec(mf_grad, mo_energy=None, mo_coeff=None, mo_occ=None, atmlst=None):
     '''
@@ -248,6 +249,7 @@ def as_scanner(mf_grad):
 class SCF_GradScanner(lib.GradScanner):
     def __init__(self, g):
         lib.GradScanner.__init__(self, g)
+        self.gext_enabled = False
 
     def __call__(self, mol_or_geom, **kwargs):
         if isinstance(mol_or_geom, gto.MoleBase):
@@ -256,9 +258,19 @@ class SCF_GradScanner(lib.GradScanner):
         else:
             mol = self.mol.set_geom_(mol_or_geom, inplace=False)
 
+        if self.gext_enabled:
+            overlap = self.base.get_ovlp(self.mol)
+            hcore = self.base.get_hcore(self.mol)
+            mo_guess = self.extrapolator.guess(hcore, overlap)
+            if mo_guess is not None:
+                self.base.mo_coeff[:, :self.mol.nelectron//2] = mo_guess
+
         self.reset(mol)
         mf_scanner = self.base
         e_tot = mf_scanner(mol)
+
+        if self.gext_enabled:
+            self.extrapolator.load_(hcore, self.base.mo_coeff, overlap)
 
         if isinstance(mf_scanner, hf.KohnShamDFT):
             if getattr(self, 'grids', None):
@@ -269,6 +281,9 @@ class SCF_GradScanner(lib.GradScanner):
         de = self.kernel(**kwargs)
         return e_tot, de
 
+    def enable_gext(self):
+        self.extrapolator = Extrapolator(int(self.mol.nelectron))
+        self.gext_enabled = True
 
 class GradientsBase(lib.StreamObject):
     '''
