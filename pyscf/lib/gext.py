@@ -1,5 +1,6 @@
 """Module for performing Grassmann extrapolations."""
 
+import warnings
 import numpy as np
 
 def _grassmann_log(c: np.ndarray, c0: np.ndarray) -> np.ndarray:
@@ -36,44 +37,50 @@ class Extrapolator:
     def load_(self, descriptor: np.ndarray, coeff: np.ndarray,
             overlap: np.ndarray):
         """Load a new data point in the extrapolator."""
+        try:
+            # Crop the coefficient matrix up to the number of electron
+            # pairs, then apply S^1/2
+            coeff = self._crop_coeff(coeff)
+            coeff = self._normalize(coeff, overlap)
 
-        # Crop the coefficient matrix up to the number of electron
-        # pairs, then apply S^1/2
-        coeff = self._crop_coeff(coeff)
-        coeff = self._normalize(coeff, overlap)
+            self.descriptors.append(descriptor.flatten())
+            self.coefficients.append(coeff)
+            self.overlaps.append(overlap)
 
-        self.descriptors.append(descriptor.flatten())
-        self.coefficients.append(coeff)
-        self.overlaps.append(overlap)
-
-        self.npoints += 1
-
+            self.npoints += 1
+        except Exception as e:
+            warnings.warn(f"Error in Extrapolator.load_: {e}")
 
     def guess(self, descriptor: np.ndarray, overlap: np.ndarray):
         """Get a new coefficient matrix to be used as a guess."""
+        try:
+            if not self._ready_to_guess():
+                return None
 
-        if not self._ready_to_guess():
-            return None
+            # get the fitting coefficients that best approximate the new
+            # descriptor
+            fit_coefficients = self.fit.fit(self.descriptors,
+                descriptor.flatten())
 
-        # get the fitting coefficients that best approximate the new
-        # descriptor
-        fit_coefficients = self.fit.fit(self.descriptors, descriptor.flatten())
+            # map the previous coefficient matrices to a vector space
+            gammas = []
+            for coeff in self.coefficients:
+                gammas.append(self._grassmann_log(coeff))
 
-        # map the previous coefficient matrices to a vector space
-        gammas = []
-        for coeff in self.coefficients:
-            gammas.append(self._grassmann_log(coeff))
+            # use the fitting coefficients and the vectors to build a
+            # guess vector
+            gamma = self.fit.linear_combination(gammas, fit_coefficients)
 
-        # use the fitting coefficients and the vectors to build a
-        # guess vector
-        gamma = self.fit.linear_combination(gammas, fit_coefficients)
-
-        # transform the guess vector in a gues coefficient matrix and
-        # remove the normalization by S^1/2
-        c_guess = self._grassmann_exp(gamma)
-        return self._unnormalize(c_guess, overlap)
+            # transform the guess vector in a gues coefficient matrix and
+            # remove the normalization by S^1/2
+            c_guess = self._grassmann_exp(gamma)
+            return self._unnormalize(c_guess, overlap)
+        except Exception as e:
+            warnings.warn("Error in Extrapolator.guess, swiching" +
+                f"to a normal guess: {e}")
 
     def _ready_to_guess(self):
+        """Check if enough data points have been loaded."""
         if self.npoints > 1:
             return True
         return False
