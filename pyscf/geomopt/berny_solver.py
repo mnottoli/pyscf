@@ -117,7 +117,7 @@ def kernel(method, assert_convergence=ASSERT_CONV,
         g_scanner.atmlst = numpy.where(method.mol.atom_charges() != 0)[0]
 
     if kwargs.get("gext"):
-        g_scanner.enable_gext()
+        g_scanner.base.enable_gext()
 
     # When symmetry is enabled, the molecule may be shifted or rotated to make
     # the z-axis be the main axis. The transformation can cause inconsistency

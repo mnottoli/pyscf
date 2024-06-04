@@ -36,6 +36,7 @@ from pyscf.scf import chkfile
 from pyscf.data import nist
 from pyscf import __config__
 
+from pyscf.lib.gext import Extrapolator
 
 WITH_META_LOWDIN = getattr(__config__, 'scf_analyze_with_meta_lowdin', True)
 PRE_ORTH_METHOD = getattr(__config__, 'scf_analyze_pre_orth_method', 'ANO')
@@ -1391,12 +1392,20 @@ class SCF_Scanner(lib.SinglePointScanner):
     def __init__(self, mf_obj):
         self.__dict__.update(mf_obj.__dict__)
         self._last_mol_fp = mf_obj.mol.ao_loc
+        self.gext_enabled = False
 
     def __call__(self, mol_or_geom, **kwargs):
         if isinstance(mol_or_geom, gto.MoleBase):
             mol = mol_or_geom
         else:
             mol = self.mol.set_geom_(mol_or_geom, inplace=False)
+
+        if self.gext_enabled:
+            overlap = self.get_ovlp(self.mol)
+            hcore = self.get_hcore(self.mol)
+            mo_guess = self.extrapolator.guess(hcore, overlap)
+            if mo_guess is not None:
+                self.mo_coeff[:, :self.mol.nelectron//2] = mo_guess
 
         # Cleanup intermediates associated to the previous mol object
         self.reset(mol)
@@ -1421,8 +1430,19 @@ class SCF_Scanner(lib.SinglePointScanner):
         self.mo_coeff = None  # To avoid last mo_coeff being used by SOSCF
         e_tot = self.kernel(dm0=dm0, **kwargs)
         self._last_mol_fp = mol.ao_loc
+
+        if self.gext_enabled:
+            self.extrapolator.load_(hcore, self.mo_coeff, overlap)
+
         return e_tot
 
+    def enable_gext(self):
+        #if not isinstance(self.base, (hf.RKS_Scanner, hf.RHF_Scanner)):
+        #    warning.warn("The Grassmann extrapolation is only available" + \
+        #        " with restricted closed shell methods.")
+        #    return
+        self.extrapolator = Extrapolator(int(self.mol.nelectron))
+        self.gext_enabled = True
 
 class SCF(lib.StreamObject):
     '''SCF base class.   non-relativistic RHF.
