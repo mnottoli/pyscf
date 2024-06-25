@@ -1393,7 +1393,8 @@ class SCF_Scanner(lib.SinglePointScanner):
     def __init__(self, mf_obj):
         self.__dict__.update(mf_obj.__dict__)
         self._last_mol_fp = mf_obj.mol.ao_loc
-        self.gext_enabled = False
+        self._gext_enabled = False
+        self._extrapolator = None
 
     def __call__(self, mol_or_geom, **kwargs):
         if isinstance(mol_or_geom, gto.MoleBase):
@@ -1401,10 +1402,10 @@ class SCF_Scanner(lib.SinglePointScanner):
         else:
             mol = self.mol.set_geom_(mol_or_geom, inplace=False)
 
-        if self.gext_enabled:
+        if self._gext_enabled:
             overlap = self.get_ovlp(self.mol)
             hcore = self.get_hcore(self.mol)
-            mo_guess = self.extrapolator.guess(hcore, overlap)
+            mo_guess = self._extrapolator.guess(hcore, overlap)
             if mo_guess is not None:
                 self.mo_coeff[:, :self.mol.nelectron//2] = mo_guess
 
@@ -1432,8 +1433,8 @@ class SCF_Scanner(lib.SinglePointScanner):
         e_tot = self.kernel(dm0=dm0, **kwargs)
         self._last_mol_fp = mol.ao_loc
 
-        if self.gext_enabled:
-            self.extrapolator.load_(hcore, self.mo_coeff, overlap)
+        if self._gext_enabled:
+            self._extrapolator.load_(hcore, self.mo_coeff, overlap)
 
         return e_tot
 
@@ -1445,8 +1446,8 @@ class SCF_Scanner(lib.SinglePointScanner):
             warnings.warn('The Grassmann extrapolation is only available '
                           'with restricted closed shell methods.')
             return
-        self.extrapolator = Extrapolator(nelectron)
-        self.gext_enabled = True
+        self._extrapolator = Extrapolator(nelectron)
+        self._gext_enabled = True
 
 class SCF(lib.StreamObject):
     '''SCF base class.   non-relativistic RHF.
