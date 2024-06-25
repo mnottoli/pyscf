@@ -27,6 +27,7 @@ class Extrapolator:
     calling the `guess` method."""
 
     def __init__(self, nelectrons):
+        self.max_npoints = 50
         self.nelectrons = nelectrons
         self.descriptors = []
         self.coefficients = []
@@ -44,10 +45,18 @@ class Extrapolator:
             coeff = self._normalize(coeff, overlap)
 
             self.descriptors.append(descriptor.flatten())
+
+            # if the number of data points exceeds the maximum allowed
+            # the oldest data point is discarded
+            if self.npoints >= self.max_npoints:
+                self.coefficients.pop(0)
+                self.overlaps.pop(0)
+            else:
+                self.npoints += 1
+
             self.coefficients.append(coeff)
             self.overlaps.append(overlap)
 
-            self.npoints += 1
         except Exception as e:
             warnings.warn(f"Error in Extrapolator.load_: {e}")
 
@@ -78,6 +87,7 @@ class Extrapolator:
         except Exception as e:
             warnings.warn("Error in Extrapolator.guess, swiching" +
                 f"to a normal guess: {e}")
+            return None
 
     def _ready_to_guess(self):
         """Check if enough data points have been loaded."""
