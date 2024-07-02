@@ -62,32 +62,27 @@ class Extrapolator:
 
     def guess(self, descriptor: np.ndarray, overlap: np.ndarray):
         """Get a new coefficient matrix to be used as a guess."""
-        try:
-            if not self._ready_to_guess():
-                return None
-
-            # get the fitting coefficients that best approximate the new
-            # descriptor
-            fit_coefficients = self.fit.fit(self.descriptors,
-                descriptor.flatten())
-
-            # map the previous coefficient matrices to a vector space
-            gammas = []
-            for coeff in self.coefficients:
-                gammas.append(self._grassmann_log(coeff))
-
-            # use the fitting coefficients and the vectors to build a
-            # guess vector
-            gamma = self.fit.linear_combination(gammas, fit_coefficients)
-
-            # transform the guess vector in a gues coefficient matrix and
-            # remove the normalization by S^1/2
-            c_guess = self._grassmann_exp(gamma)
-            return self._unnormalize(c_guess, overlap)
-        except Exception as e:
-            warnings.warn("Error in Extrapolator.guess, swiching" +
-                f"to a normal guess: {e}")
+        #try:
+        if not self._ready_to_guess():
             return None
+
+        # map the previous coefficient matrices to a vector space
+        gammas = []
+        for coeff in self.coefficients:
+            gammas.append(self._grassmann_log(coeff))
+
+        # train the model and then evaluate it at the new descriptor
+        self.fit.train(self.descriptors, gammas)
+        gamma = self.fit.extrapolate(descriptor)
+
+        # transform the guess vector in a gues coefficient matrix and
+        # remove the normalization by S^1/2
+        c_guess = self._grassmann_exp(gamma)
+        return self._unnormalize(c_guess, overlap)
+        #except Exception as e:
+        #    warnings.warn("Error in Extrapolator.guess, swiching" +
+        #        f"to a normal guess: {e}")
+        #    return None
 
     def _ready_to_guess(self):
         """Check if enough data points have been loaded."""
@@ -138,33 +133,39 @@ class Fitting:
 
     def __init__(self, regularization=1e-4):
         self.regularization = regularization
+        self.matrix = None
+        self.ref = None
+        self.gammas = None
 
-    def fit(self, vectors, target):
-        """Given a set of vectors and a target return the fitting
-        coefficients."""
+    def train(self, vectors, gammas):
+        """Given a set of vectors and gammas prepare the object for
+        doing an extrapolation."""
 
         if len(vectors) == 1:
             raise ValueError("The fitting does not work for one vector")
 
-        target -= vectors[-1]
+        self.ref = vectors[-1]
+        self.gammas = gammas[:-1]
 
         diff_vectors = []
-        for i in range(1, len(vectors)):
-            diff_vectors.append(vectors[i-1] - vectors[-1])
+        for i in range(len(vectors) - 1):
+            diff_vectors.append(vectors[i] - self.ref)
+        d = np.array(diff_vectors).T
 
-        matrix = np.array(diff_vectors).T
-        a = matrix.T @ matrix
-        b = matrix.T @ target
+        # compute the Moore-Penrose pseudo inverse of the descriptors
+        a = d.T @ d
         if self.regularization > 0.0:
-            a += np.identity(len(b))*self.regularization**2
-        coefficients = np.linalg.solve(a, b)
+            a += np.identity(a.shape[0])*self.regularization**2
+        self.matrix = np.linalg.inv(a) @ d.T
 
-        return np.concatenate((coefficients, [1.0 - np.sum(coefficients)]))
+    def extrapolate(self, descriptor):
+        """Given a new descriptor extrapolate the corresponding gamma."""
 
-    def linear_combination(self, vectors, coefficients):
-        """Given a set of vectors (or matrices) and the corresponding
-        coefficients, build their linear combination."""
-        result = np.zeros(vectors[0].shape, dtype=np.float64)
-        for coeff, vector in zip(coefficients, vectors):
-            result += vector*coeff
+        if self.matrix is None:
+            raise ValueError("The model is not trained.")
+
+        coefficients = self.matrix @ (descriptor.flatten() - self.ref)
+        result = np.zeros(self.gammas[0].shape, dtype=np.float64)
+        for coeff, gamma in zip(coefficients, self.gammas):
+            result += gamma*coeff
         return result

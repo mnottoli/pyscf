@@ -670,7 +670,7 @@ def setUpModule():
           -1.59368537e-01,-2.70261520e-01,-1.42752045e-01,-1.97451581e-01,
           -3.35779747e-01]])
 
-    ref_coeffs = np.array([0.32452369, 0.67547631])
+    ref_coeffs = np.array([0.32452369])
 
 def tearDownModule():
     global mf, mol, mos, hcores, overlaps
@@ -710,7 +710,9 @@ class KnownValues(unittest.TestCase):
     def test_fitting(self):
         fitting = lib.gext.Fitting()
         flattened_hcores = [hcore.flatten() for hcore in hcores]
-        coeffs = fitting.fit(flattened_hcores[0:2], flattened_hcores[2])
+
+        fitting.train(flattened_hcores[0:2], [1, 2])
+        coeffs = fitting.matrix @ (flattened_hcores[2] - fitting.ref)
         self.assertTrue(np.allclose(coeffs, ref_coeffs))
 
     def test_extrapolation(self):
