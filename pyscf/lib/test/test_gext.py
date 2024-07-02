@@ -680,7 +680,17 @@ def tearDownModule():
 class KnownValues(unittest.TestCase):
 
     def test_grassmann_mapping(self):
-        extrapolator = lib.gext.Extrapolator(nelectrons)
+        cases = [{"fitting": "descriptor_fitting",
+                  "order": 1},
+                 {"fitting": "regression",
+                  "order": 1},
+                 {"fitting": "regression",
+                  "order": 2}]
+        for case in cases:
+            self.grassmann_mapping(case["fitting"], case["order"])
+
+    def grassmann_mapping(self, fitting, order):
+        extrapolator = lib.gext.Extrapolator(nelectrons, fitting=fitting, order=order)
         for i in range(2):
             extrapolator.load_(hcores[i], mos[i], overlaps[i])
 
