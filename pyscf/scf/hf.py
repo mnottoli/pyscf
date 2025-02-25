@@ -170,10 +170,15 @@ Keyword argument "init_dm" is replaced by "dm0"''')
         dm_last = dm
         last_hf_e = e_tot
 
+        print(f"{cycle}")
+
         fock = mf.get_fock(h1e, s1e, vhf, dm, cycle, mf_diis, fock_last=fock_last)
         mo_energy, mo_coeff = mf.eig(fock, s1e)
         mo_occ = mf.get_occ(mo_energy, mo_coeff)
         dm = mf.make_rdm1(mo_coeff, mo_occ)
+        #dm = new_function_that_does_d_diis(dm)
+        if hasattr(mf_diis, "density_diis"):
+            dm = mf_diis.update(s1e, dm, fock, h1e)
         vhf = mf.get_veff(mol, dm, dm_last, vhf)
         e_tot = mf.energy_tot(dm, h1e, vhf)
 
@@ -1029,10 +1034,13 @@ def get_fock(mf, h1e=None, s1e=None, vhf=None, dm=None, cycle=-1, diis=None,
     if dm is None: dm = mf.make_rdm1()
 
     if 0 <= cycle < diis_start_cycle-1 and abs(damp_factor) > 1e-4 and fock_last is not None:
+        print(f"{cycle} damping")
         f = damping(f, fock_last, damp_factor)
     if diis is not None and cycle >= diis_start_cycle:
-        f = diis.update(s1e, dm, f, mf, h1e, vhf, f_prev=fock_last)
+        if not hasattr(diis, "density_diis"):
+            f = diis.update(s1e, dm, f, mf, h1e, vhf, f_prev=fock_last)
     if abs(level_shift_factor) > 1e-4:
+        print(f"{cycle} level shift")
         f = level_shift(s1e, dm*.5, f, level_shift_factor)
     return f
 

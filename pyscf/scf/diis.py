@@ -46,12 +46,15 @@ class CDIIS(lib.diis.DIIS):
         self.damp = 0
 
     def update(self, s, d, f, *args, **kwargs):
+        print("Hi from CDIIS:", end=" ")
         errvec = get_err_vec(s, d, f, self.Corth)
         logger.debug1(self, 'diis-norm(errvec)=%g', numpy.linalg.norm(errvec))
         f_prev = kwargs.get('f_prev', None)
         if abs(self.damp) < 1e-6 or f_prev is None:
+            print("without damping")
             xnew = lib.diis.DIIS.update(self, f, xerr=errvec)
         else:
+            print(f"with damping {self.damp}")
             xnew = lib.diis.DIIS.update(self, f*(1-self.damp) + f_prev*self.damp, xerr=errvec)
         if self.rollback > 0 and len(self._bookkeep) == self.space:
             self._bookkeep = self._bookkeep[-self.rollback:]
@@ -245,3 +248,78 @@ def adiis_minimize(ds, fs, idnewest):
     res = scipy.optimize.minimize(costf, numpy.ones(nx), method='BFGS',
                                   jac=grad, tol=1e-9)
     return res.fun, (res.x**2)/(res.x**2).sum()
+
+class DDIIS(lib.diis.DIIS):
+    def __init__(self, mf=None, filename=None, Corth=None):
+        lib.diis.DIIS.__init__(self, mf, filename)
+        self.rollback = 0
+        self.space = 8
+        self.Corth = Corth
+        self.damp = 0
+        self.density_diis = True
+
+    def update(self, s, d, f, *args, **kwargs):
+        print("Hi from DDIIS")
+        errvec = get_err_vec(s, d, f, self.Corth)
+        logger.debug1(self, 'diis-norm(errvec)=%g', numpy.linalg.norm(errvec))
+        xnew = lib.diis.DIIS.update(self, d, xerr=errvec)
+        if self.rollback > 0 and len(self._bookkeep) == self.space:
+            self._bookkeep = self._bookkeep[-self.rollback:]
+        return xnew
+
+    def get_num_vec(self):
+        if self.rollback:
+            return self._head
+        else:
+            return len(self._bookkeep)
+
+class GDIIS(lib.diis.DIIS):
+    def __init__(self, mf=None, filename=None, Corth=None):
+        lib.diis.DIIS.__init__(self, mf, filename)
+        self.rollback = 0
+        self.space = 8
+        self.Corth = Corth
+        self.damp = 0
+        self.density_diis = True
+
+    def update(self, s, d, f, *args, **kwargs):
+        print("Hi from GDIIS")
+        errvec = get_err_vec(s, d, f, self.Corth)
+        logger.debug1(self, 'diis-norm(errvec)=%g', numpy.linalg.norm(errvec))
+        # update should get a gamma vector
+        xnew = lib.diis.DIIS.update(self, d, xerr=errvec)
+        # xnew needs to be converted back to a density (it is a gamma vector)
+        if self.rollback > 0 and len(self._bookkeep) == self.space:
+            self._bookkeep = self._bookkeep[-self.rollback:]
+        return xnew
+
+    def get_num_vec(self):
+        if self.rollback:
+            return self._head
+        else:
+            return len(self._bookkeep)
+
+class DummyDIIS(lib.diis.DIIS):
+    def __init__(self, mf=None, filename=None, Corth=None):
+        lib.diis.DIIS.__init__(self, mf, filename)
+        self.rollback = 0
+        self.space = 8
+        self.Corth = Corth
+        self.damp = 0
+
+    def update(self, s, d, f, *args, **kwargs):
+        print("Hi from DummyDIIS")
+        errvec = get_err_vec(s, d, f, self.Corth)
+        logger.debug1(self, 'diis-norm(errvec)=%g', numpy.linalg.norm(errvec))
+        # update should get a gamma vector
+        xnew = f
+        # xnew needs to be converted back to a density (it is a gamma vector)
+        if self.rollback > 0 and len(self._bookkeep) == self.space:
+            self._bookkeep = self._bookkeep[-self.rollback:]
+        return xnew
+
+    def get_num_vec(self):
+        if self.rollback:
+            return self._head
+        else:
+            return len(self._bookkeep)
