@@ -44,16 +44,16 @@ class Extrapolator:
             coeff = self._crop_coeff(coeff)
             coeff = self._normalize(coeff, overlap)
 
-            self.descriptors.append(descriptor.flatten())
-
             # if the number of data points exceeds the maximum allowed
             # the oldest data point is discarded
             if self.npoints >= self.max_npoints:
                 self.coefficients.pop(0)
                 self.overlaps.pop(0)
+                self.descriptors.pop(0)
             else:
                 self.npoints += 1
 
+            self.descriptors.append(descriptor.flatten())
             self.coefficients.append(coeff)
             self.overlaps.append(overlap)
 
